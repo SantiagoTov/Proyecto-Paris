@@ -12,10 +12,11 @@ import AdminDashboard from './pages/AdminDashboard';
 import HistorialLlamadas from './pages/CallHistory';
 import CRM from './pages/CRM';
 import Integrations from './pages/Integrations';
-import DataModel from './pages/DataModel';
+import Settings from './pages/Settings';
 import Tasks from './pages/Tasks';
 import PrivateRoute from './components/PrivateRoute';
 import { AuthProvider } from './contexts/AuthContext';
+import TaskReminderSystem from './components/TaskReminderSystem';
 
 import '@fontsource/inter/300.css';
 import '@fontsource/inter/400.css';
@@ -137,6 +138,7 @@ function Layout() {
         minWidth: 0,
         overflow: 'hidden'
       }}>
+        <TaskReminderSystem />
         <Box sx={{
           flexGrow: 1,
           overflowY: 'auto',
@@ -173,7 +175,7 @@ function App() {
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/calls" element={<HistorialLlamadas />} />
                 <Route path="/integrations" element={<Integrations />} />
-                <Route path="/data-model" element={<DataModel />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="/tasks" element={<Tasks />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

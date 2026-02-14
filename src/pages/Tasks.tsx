@@ -33,6 +33,8 @@ import {
     CheckCircle as DoneIcon,
     Pending as PendingIcon,
     RadioButtonUnchecked as TodoIcon,
+    Repeat as RepeatIcon,
+    EventRepeat as RecurringIcon,
 } from '@mui/icons-material';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,6 +49,9 @@ interface Task {
     assignee_id: string | null;
     assignee_type: 'user' | 'agent' | null;
     created_at: string;
+    is_recurring: boolean;
+    recurrence_interval: number | null;
+    recurrence_period: 'days' | 'weeks' | 'months' | null;
     leads?: {
         title: string;
         phone_number: string;
@@ -78,6 +83,7 @@ export default function Tasks() {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [userTimezone, setUserTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
     // Dialog states
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -113,8 +119,17 @@ export default function Tasks() {
         }
     };
 
+    const fetchTimezone = async () => {
+        if (!user) return;
+        const { data } = await supabase.from('user_table_config').select('metadata').eq('user_id', user.id).eq('table_name', 'general_settings').single();
+        if (data?.metadata?.timezone) {
+            setUserTimezone(data.metadata.timezone);
+        }
+    };
+
     useEffect(() => {
         fetchData();
+        fetchTimezone();
     }, [user]);
 
     const handleSaveTask = async () => {
@@ -133,7 +148,24 @@ export default function Tasks() {
         if (editingTask.id) {
             await supabase.from('tasks').update(taskData).eq('id', editingTask.id);
         } else {
-            await supabase.from('tasks').insert([taskData]);
+            const { data: newTask, error: insertError } = await supabase.from('tasks').insert([taskData]).select().single();
+
+            // Si es recurrente y está ligada a un cliente, guardar el patrón en el cliente
+            if (!insertError && newTask && newTask.is_recurring && newTask.lead_id) {
+                const { data: lead } = await supabase.from('leads').select('metadata, behavioral_insights').eq('id', newTask.lead_id).single();
+                if (lead) {
+                    const updatedInsights = {
+                        ...(lead.behavioral_insights || {}),
+                        purchase_pattern: {
+                            interval: newTask.recurrence_interval,
+                            period: newTask.recurrence_period,
+                            last_order_task_id: newTask.id,
+                            updated_at: new Date().toISOString()
+                        }
+                    };
+                    await supabase.from('leads').update({ behavioral_insights: updatedInsights }).eq('id', newTask.lead_id);
+                }
+            }
         }
 
         setDialogOpen(false);
@@ -148,7 +180,30 @@ export default function Tasks() {
     };
 
     const handleStatusChange = async (taskId: string, newStatus: string) => {
+        const { data: currentTask } = await supabase.from('tasks').select('*').eq('id', taskId).single();
+
         await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+
+        // Lógica de Recurrencia: Si se marca como 'done' y es recurrente, crear la siguiente
+        if (newStatus === 'done' && currentTask?.is_recurring) {
+            const nextDueDate = new Date(currentTask.due_date || new Date());
+            const interval = currentTask.recurrence_interval || 7;
+
+            if (currentTask.recurrence_period === 'days') nextDueDate.setDate(nextDueDate.getDate() + interval);
+            else if (currentTask.recurrence_period === 'weeks') nextDueDate.setDate(nextDueDate.getDate() + (interval * 7));
+            else if (currentTask.recurrence_period === 'months') nextDueDate.setMonth(nextDueDate.getMonth() + interval);
+
+            const { id: _id, created_at: _ca, status: _st, ...newTaskData } = currentTask;
+            await supabase.from('tasks').insert([{
+                ...newTaskData,
+                status: 'todo',
+                due_date: nextDueDate.toISOString(),
+                created_at: new Date().toISOString()
+            }]);
+
+            fetchData();
+        }
+
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus as any } : t));
     };
 
@@ -183,7 +238,7 @@ export default function Tasks() {
     }
 
     return (
-        <Box sx={{ p: { xs: 2, md: 4 }, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <Box>
@@ -330,11 +385,12 @@ export default function Tasks() {
                             </FormControl>
                             <TextField
                                 fullWidth
-                                type="date"
-                                label="Fecha límite"
+                                type="datetime-local"
+                                label="Fecha y Hora límite"
                                 InputLabelProps={{ shrink: true }}
-                                value={editingTask?.due_date?.split('T')[0] || ''}
-                                onChange={(e) => setEditingTask(prev => ({ ...prev, due_date: e.target.value }))}
+                                value={editingTask?.due_date ? new Date(new Date(editingTask.due_date).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                                onChange={(e) => setEditingTask(prev => ({ ...prev, due_date: new Date(e.target.value).toISOString() }))}
+                                helperText={`Zona horaria configurada: ${userTimezone}`}
                             />
                         </Stack>
                         <FormControl fullWidth>
@@ -385,6 +441,51 @@ export default function Tasks() {
                                 ))}
                             </Select>
                         </FormControl>
+
+                        <Divider>
+                            <Chip label="Configuración de Recurrencia" size="small" icon={<RepeatIcon />} />
+                        </Divider>
+
+                        <Box sx={{ p: 2, borderRadius: 3, bgcolor: 'rgba(124, 58, 237, 0.05)', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                                <FormControl fullWidth size="small">
+                                    <InputLabel>¿Es recurrente?</InputLabel>
+                                    <Select
+                                        label="¿Es recurrente?"
+                                        value={editingTask?.is_recurring ? 'yes' : 'no'}
+                                        onChange={(e) => setEditingTask(prev => ({ ...prev, is_recurring: e.target.value === 'yes' }))}
+                                    >
+                                        <MenuItem value="no">No, es tarea única</MenuItem>
+                                        <MenuItem value="yes">Sí, repetir automáticamente</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Stack>
+
+                            {editingTask?.is_recurring && (
+                                <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                                    <TextField
+                                        label="Repetir cada"
+                                        type="number"
+                                        size="small"
+                                        value={editingTask?.recurrence_interval || 1}
+                                        onChange={(e) => setEditingTask(prev => ({ ...prev, recurrence_interval: parseInt(e.target.value) }))}
+                                        sx={{ width: 120 }}
+                                    />
+                                    <FormControl fullWidth size="small">
+                                        <InputLabel>Periodo</InputLabel>
+                                        <Select
+                                            label="Periodo"
+                                            value={editingTask?.recurrence_period || 'days'}
+                                            onChange={(e) => setEditingTask(prev => ({ ...prev, recurrence_period: e.target.value as any }))}
+                                        >
+                                            <MenuItem value="days">Días</MenuItem>
+                                            <MenuItem value="weeks">Semanas</MenuItem>
+                                            <MenuItem value="months">Meses</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Stack>
+                            )}
+                        </Box>
                     </Stack>
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
@@ -446,10 +547,25 @@ function TaskCard({ task, onEdit, onDragStart }: { task: Task, onEdit: () => voi
                 )}
 
                 <Stack direction="row" spacing={1} sx={{ mt: 'auto' }}>
+                    {task.is_recurring && (
+                        <Tooltip title={`Se repite cada ${task.recurrence_interval} ${task.recurrence_period}`}>
+                            <Chip
+                                icon={<RecurringIcon sx={{ fontSize: '12px !important' }} />}
+                                label="Recurrente"
+                                size="small"
+                                sx={{
+                                    height: 20, fontSize: '0.65rem', fontWeight: 700,
+                                    bgcolor: 'rgba(192, 38, 211, 0.1)',
+                                    color: '#C026D3',
+                                    border: '1px solid rgba(192, 38, 211, 0.2)'
+                                }}
+                            />
+                        </Tooltip>
+                    )}
                     {task.due_date && (
                         <Chip
                             icon={<ClockIcon sx={{ fontSize: '12px !important' }} />}
-                            label={new Date(task.due_date).toLocaleDateString()}
+                            label={new Date(task.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                             size="small"
                             sx={{
                                 height: 20, fontSize: '0.65rem', fontWeight: 700,

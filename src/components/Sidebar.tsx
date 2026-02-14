@@ -1,4 +1,4 @@
-import { Box, List, ListItem, ListItemButton, ListItemIcon, Tooltip, Divider, Avatar } from '@mui/material';
+import { Box, List, ListItem, ListItemButton, ListItemIcon, Tooltip, Divider, Avatar, IconButton, Badge } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import PhoneIcon from '@mui/icons-material/Phone';
 import ContactsIcon from '@mui/icons-material/Contacts';
@@ -7,6 +7,10 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import NotificationPanel from './NotificationPanel';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,14 +19,40 @@ export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
     const { signOut, user } = useAuth();
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    const fetchUnreadCount = async () => {
+        if (!user) return;
+        const { count } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('read', false);
+        setUnreadCount(count || 0);
+    };
+
+    useEffect(() => {
+        fetchUnreadCount();
+        const subscription = supabase
+            .channel('notifications_count')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+                fetchUnreadCount();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(subscription);
+        };
+    }, [user]);
 
     const menuItems = [
-        { id: '/', label: 'Mis Prospectos', icon: <ContactsIcon /> },
+        { id: '/', label: 'Gestión de Clientes', icon: <ContactsIcon /> },
         { id: '/agents', label: 'Asistentes IA', icon: <PersonIcon /> },
         { id: '/tasks', label: 'Tareas', icon: <AssignmentIcon /> },
         { id: '/calls', label: 'Llamadas Realizadas', icon: <PhoneIcon /> },
         { id: '/integrations', label: 'Conexiones', icon: <ExtensionIcon /> },
-        { id: '/data-model', label: 'Configuración', icon: <SettingsIcon /> },
+        { id: '/settings', label: 'Configuración', icon: <SettingsIcon /> },
     ];
 
     return (
@@ -65,6 +95,25 @@ export default function Sidebar() {
                     P
                 </Box>
             </Box>
+
+            {/* Notification Bell */}
+            <Tooltip title="Notificaciones" placement="right" arrow>
+                <IconButton
+                    onClick={() => setNotifOpen(true)}
+                    sx={{
+                        mb: 2,
+                        color: unreadCount > 0 ? 'primary.light' : 'text.secondary',
+                        bgcolor: unreadCount > 0 ? 'rgba(124, 58, 237, 0.1)' : 'transparent',
+                        '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' }
+                    }}
+                >
+                    <Badge badgeContent={unreadCount} color="error" sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', height: 16, minWidth: 16 } }}>
+                        <NotificationsIcon />
+                    </Badge>
+                </IconButton>
+            </Tooltip>
+
+            <NotificationPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
 
             <List sx={{ width: '100%', px: 1, flexGrow: 1 }}>
                 {menuItems.map((item) => {
