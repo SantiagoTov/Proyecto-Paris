@@ -1,0 +1,13 @@
+python-dotenv
+requests
+groq
+supabase
+twilio
+google-generativeai
+fastapi
+uvicorn
+pydantic
+reportlab
+schedule
+psycopg2-binary
+

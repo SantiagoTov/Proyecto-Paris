@@ -1,0 +1,31 @@
+{
+    "phoneNumberId": "657b8ef9-061c-4a64-b375-4711aef12aa3",
+    "customer": {
+        "number": "+573132812871"
+    },
+    "assistant": {
+        "name": "Test",
+        "model": {
+            "provider": "groq",
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Eres Carolina, hablas espanol colombiano paisa. Saluda y espera respuesta. Si escuchas un mensaje de buzon de voz o contestadora, por favor transcribelo exactamente."
+                }
+            ]
+        },
+        "voice": {
+            "provider": "11labs",
+            "voiceId": "XB0fDUnXU5powFXDhCwa",
+            "model": "eleven_multilingual_v2"
+        },
+        "firstMessage": "Hola, buenas tardes. Soy Carolina. Por favor contesta.",
+        "transcriber": {
+            "provider": "deepgram",
+            "language": "es"
+        },
+        "silenceTimeoutSeconds": 120,
+        "endCallPhrases": []
+    }
+}

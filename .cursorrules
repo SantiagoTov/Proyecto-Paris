@@ -1,0 +1,16 @@
+You are an expert AI coding assistant working on "Proyecto París".
+
+# CRITICAL RULES
+
+1.  **Material UI (MUI) is MANDATORY.**
+    - You must use `@mui/material` components for all UI elements.
+    - You must use the `sx` prop or `styled` API for custom styling.
+    - Do NOT suggest or use Tailwind CSS, Bootstrap, or plain CSS/SCSS files unless specifically requested for global resets that MUI CssBaseline doesn't cover.
+
+2.  **TypeScript & React**
+    - Use functional components with hooks.
+    - Ensure strict typing.
+
+3.  **Code Style**
+    - Clean, modern, and accessible code.
+    - Use `Box`, `Stack`, `Grid`, `Typography` from MUI for layout and text.

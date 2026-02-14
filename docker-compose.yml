@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  server:
+    image: twentycrm/twenty:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - PG_DATABASE_URL=postgresql://postgres.njtsffqvpzuzgvvowmum:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST}:5432/postgres
+      - FRONT_BASE_URL=http://localhost:3000
+      - IGN_SIGN_UP_TOKEN=
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=.local-storage
+      - APP_SECRET=replace-me-with-a-random-string
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - LOG_LEVEL=debug
+      - AUTH_GOOGLE_ENABLED=true
+      - AUTH_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - AUTH_GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - AUTH_GOOGLE_CALLBACK_URL=http://localhost:3000/auth/callback/google
+    dns:
+      - 8.8.8.8
+    depends_on:
+      - redis
+    volumes:
+      - server-local-data:/app/.local-storage
+      - server-local-data:/app/packages/twenty-server/.local-storage
+
+  worker:
+    image: twentycrm/twenty:latest
+    command: [ "yarn", "worker:prod" ]
+    environment:
+      - PG_DATABASE_URL=postgresql://postgres.njtsffqvpzuzgvvowmum:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST}:5432/postgres
+      - FRONT_BASE_URL=http://localhost:3000
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=.local-storage
+      - APP_SECRET=replace-me-with-a-random-string
+      - REDIS_URL=redis://redis:6379
+      - NODE_OPTIONS=--max-old-space-size=4096
+    dns:
+      - 8.8.8.8
+    depends_on:
+      - server
+      - redis
+
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  server-local-data:
+  redis-data:
